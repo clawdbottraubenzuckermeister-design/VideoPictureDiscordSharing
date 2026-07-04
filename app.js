@@ -307,10 +307,17 @@ function uploadLitterbox(file) {
     xhr.open("POST", LITTERBOX_API);
     xhr.onload = () => {
       const body = (xhr.responseText || "").trim();
-      if (xhr.status === 200 && /^https?:\/\//.test(body)) resolve(body);
-      else reject(new Error(`Litterbox-Upload fehlgeschlagen (${xhr.status})`));
+      if (xhr.status === 200 && /^https?:\/\//.test(body)) {
+        resolve(body);
+      } else if (xhr.status === 412 || /bad file type/i.test(body)) {
+        reject(new Error("Litterbox erlaubt diesen Dateityp nicht (z. B. .exe/.jar). Tipp: als .zip verpacken und erneut hochladen."));
+      } else {
+        reject(new Error(`Litterbox-Upload fehlgeschlagen (${xhr.status}${body ? ": " + body.slice(0, 60) : ""})`));
+      }
     };
-    xhr.onerror = () => reject(new Error("Netzwerkfehler beim Litterbox-Upload."));
+    xhr.onerror = () => reject(new Error(
+      "Netzwerkfehler beim Litterbox-Upload. Bitte die Seite mit Strg+F5 neu laden (neue Version) und erneut versuchen.",
+    ));
     xhr.send(fd);
   });
 }

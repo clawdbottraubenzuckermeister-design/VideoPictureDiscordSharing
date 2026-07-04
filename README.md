@@ -113,6 +113,11 @@ unique per file – one click on the button, paste, done.
   files go to Litterbox and **auto-delete after 72 hours** – so share big videos soon after
   uploading. Images embed directly in Discord; for videos Discord may show a download link
   instead of an inline player – downloading always works either way.
+- **Executables:** Litterbox blocks program files (`.exe`, `.jar`, `.scr`, …) with a
+  "Bad file type" error. To share one that's over 100 MB, put it in a `.zip` first – zip
+  archives are allowed. (Under 100 MB it goes to GitHub and any type is fine.)
+- **After changes, hard-refresh:** if the page ever behaves like an old version, press
+  **Ctrl+F5** once to bypass the browser cache.
 - **Big files & privacy:** Litterbox is a third-party host; a big file sits at a random
   public URL until it expires. Same "public if you have the link" level as the repo, but on
   someone else's server – don't upload anything truly sensitive there.
