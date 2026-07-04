@@ -18,7 +18,13 @@ const API = "https://api.github.com";
 const UPLOAD_DIR = "uploads";
 const POINTER = "current.json";
 
-const GITHUB_MAX = 100 * 1024 * 1024;        // 100 MB – GitHub-Limit pro Datei
+// GitHub-Contents-API verträgt praktisch nur ~50 MB (Base64 bläht +33 % auf,
+// darüber kommt 422 "too large to be processed"). Deshalb konservativ 25 MB:
+// darunter landet fast jedes Foto dauerhaft auf GitHub, alles Größere geht zu
+// Litterbox. Videos gehen IMMER zu Litterbox, weil sie von dort mit den richtigen
+// Headern (video/mp4 + Range) direkt in Discord eingebettet werden – raw.github
+// bettet Videos nicht ein.
+const GITHUB_MAX = 25 * 1024 * 1024;         // 25 MB – sicher für die Contents-API
 const LITTERBOX_MAX = 1024 * 1024 * 1024;    // 1 GB  – Litterbox-Limit
 const LITTERBOX_API = "https://litterbox.catbox.moe/resources/internals/api.php";
 const LITTERBOX_TIME = "72h";                // maximale Haltbarkeit
@@ -322,6 +328,24 @@ function uploadLitterbox(file) {
   });
 }
 
+// Datei zu Litterbox hochladen und daraus ein Item bauen (temporär, 72 h).
+async function putToLitterbox(file, ts) {
+  setIndeterminate("Große Datei wird hochgeladen…");
+  const url = await uploadLitterbox(file);
+  return { kind: "litterbox", name: file.name, url, size: file.size, ts, expires: ts + LITTERBOX_TTL };
+}
+
+// Datei dauerhaft in den GitHub-Repo (uploads/) legen und ein Item bauen.
+async function putToGitHub(file, ts) {
+  const base64 = await fileToBase64(file, (p) => setProgress(p * 0.35, "Vorbereiten"));
+  const path = `${UPLOAD_DIR}/${ts}-${sanitizeName(file.name)}`;
+  const created = await putFile(
+    path, base64, `Datei-Share: ${file.name} hochgeladen`,
+    (p) => setProgress(0.35 + p * 0.65, "Hochladen"),
+  );
+  return { kind: "github", name: file.name, url: created.download_url, size: file.size, ts, path };
+}
+
 async function handleUpload(file) {
   const { owner, repo, token } = getConfig();
   if (!owner || !repo || !token) {
@@ -334,7 +358,9 @@ async function handleUpload(file) {
     return;
   }
 
-  const useLitterbox = file.size > GITHUB_MAX;
+  // Videos gehen immer zu Litterbox (dort in Discord einbettbar), ebenso alles
+  // über der sicheren GitHub-Grenze. Nur kleine Bilder/Dateien landen auf GitHub.
+  const preferLitterbox = inferType(file.name) === "video" || file.size > GITHUB_MAX;
   els.progressWrap.hidden = false;
   setProgress(0, "Vorbereiten");
 
@@ -343,19 +369,20 @@ async function handleUpload(file) {
     const ts = Date.now();
     let item;
 
-    if (useLitterbox) {
-      // Litterbox liefert keinen Fortschritt (siehe uploadLitterbox) -> laufender Balken.
-      setIndeterminate("Große Datei wird hochgeladen…");
-      const url = await uploadLitterbox(file);
-      item = { kind: "litterbox", name: file.name, url, size: file.size, ts, expires: ts + LITTERBOX_TTL };
+    if (preferLitterbox) {
+      item = await putToLitterbox(file, ts);
     } else {
-      const base64 = await fileToBase64(file, (p) => setProgress(p * 0.35, "Vorbereiten"));
-      const path = `${UPLOAD_DIR}/${ts}-${sanitizeName(file.name)}`;
-      const created = await putFile(
-        path, base64, `Datei-Share: ${file.name} hochgeladen`,
-        (p) => setProgress(0.35 + p * 0.65, "Hochladen"),
-      );
-      item = { kind: "github", name: file.name, url: created.download_url, size: file.size, ts, path };
+      try {
+        item = await putToGitHub(file, ts);
+      } catch (err) {
+        // Falls GitHub die Datei doch ablehnt (zu groß) -> automatisch Litterbox.
+        if (/\(41[35]\)|too large|zu groß/i.test(err.message)) {
+          toast("Datei zu groß für dauerhaften Speicher – nutze Litterbox (72 h)…");
+          item = await putToLitterbox(file, ts);
+        } else {
+          throw err;
+        }
+      }
     }
 
     setProgress(1, "Fertig");
@@ -515,6 +542,21 @@ window.addEventListener("drop", (e) => {
   els.dropZone.classList.remove("armed");
   const file = e.dataTransfer?.files?.[0];
   if (file) handleUpload(file);
+});
+
+// Aus der Zwischenablage einfügen (Strg+V) – z. B. Screenshots oder kopierte Dateien.
+function ensureFilename(file) {
+  if (file.name && /\.[A-Za-z0-9]+$/.test(file.name)) return file;
+  const ext = ((file.type.split("/")[1] || "bin").split("+")[0]);
+  return new File([file], `einfuegen-${Date.now()}.${ext}`, { type: file.type });
+}
+window.addEventListener("paste", (e) => {
+  if (!getConfig().token) return;
+  const file = e.clipboardData?.files?.[0];
+  if (file) {
+    e.preventDefault();
+    handleUpload(ensureFilename(file));
+  }
 });
 
 window.addEventListener("focus", () => {
