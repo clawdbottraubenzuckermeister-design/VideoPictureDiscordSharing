@@ -1,17 +1,24 @@
-# 📤 File-Share – a Discord workaround for big videos & images
+# 📤 File-Share – a Discord workaround for videos & images
 
-A tiny GitHub Pages site that lets you share **videos and images up to 2 GB**,
-so you never hit Discord's upload limit again.
+A tiny GitHub Pages site that lets you share **any file up to 100 MB** – far above
+Discord's free upload limit (only ~10 MB), so your phone photos and clips go through.
 
 **What it does:**
 - The page always shows **only the newest uploaded file** – playable and downloadable right there.
 - Uploading a new file **automatically deletes the old one** (no clutter).
-- Upload by **button or drag & drop**, from any device (phone included).
+- Upload by **button or drag & drop**, from any device (phone included). **Every file format** is accepted.
 - A **🗑 Clear** button wipes the current file instantly.
-- A **🔗 Copy Discord link** button gives you a link Discord **plays as a video right in the chat**.
+- A **🔗 Copy Discord link** button gives you a direct link (images embed right in the chat).
 
-Files are stored as *release assets* in your GitHub repository – that's why big files
-work (GitHub allows up to 2 GB per release asset).
+Files are stored as normal files in the `uploads/` folder of your repository, uploaded
+straight from the browser via GitHub's Contents API.
+
+> **Why 100 MB and not more?** A browser can only upload to GitHub through the Contents
+> API, and GitHub blocks any single file over 100 MB. The bigger "release asset" path
+> (up to 2 GB) refuses uploads from a browser (no CORS on `uploads.github.com`), so it
+> can't be used from a plain static page. 100 MB still covers phone photos and short
+> videos comfortably. If you regularly need multi-hundred-MB videos, you'd need a small
+> helper service (e.g. a free Cloudflare Worker) as an upload proxy – ask and it can be added.
 
 ---
 
@@ -70,8 +77,8 @@ that device's browser and is never published on the site or in the repo.
 
 1. Open the site → drag a video/image onto it, or click **📁 Choose file**.
 2. Wait for the progress bar to finish. The old file is deleted automatically.
-3. Click **🔗 Copy Discord link** and paste it into Discord → the video plays right
-   in the chat.
+3. Click **🔗 Copy Discord link** and paste it into Discord → images show inline; for a
+   video, click the link to open/download it.
 4. After the chat: click **🗑 Clear** and the page is empty again.
 
 ### Two kinds of links – quick explanation
@@ -79,11 +86,11 @@ that device's browser and is never published on the site or in the repo.
 | Link | What it's for |
 |---|---|
 | **Page link** (`…github.io/VideoPictureDiscordSharing/`) | Send it to a person once – in a browser it always shows the newest file. |
-| **Discord link** (the button on the page) | Copy it **fresh for each new video** and paste into Discord – only this makes Discord play the video inline. |
+| **Discord link** (the button on the page) | Copy it **fresh for each new file** and paste into Discord – it points straight at that file, so images embed inline. |
 
 **Why two links?** Discord permanently caches the preview of a link. If you always posted
-the same link, Discord would keep showing the *old* video forever. The Discord link is
-therefore unique per file – one click on the button, paste, done.
+the same page link, Discord would keep showing the *old* file forever. The Discord link is
+unique per file – one click on the button, paste, done.
 
 ---
 
@@ -93,8 +100,9 @@ therefore unique per file – one click on the button, paste, done.
   (or browses your GitHub profile) can see the current file. That's usually fine for phone
   videos sent to one person, but don't upload anything truly sensitive. The **🗑 Clear**
   button removes the file immediately and permanently.
-- **Limits:** max 2 GB per file (GitHub's limit). For very large videos Discord may show
-  only a download link instead of the inline player – downloading always works.
+- **Limits:** max 100 MB per file (GitHub's hard limit for browser uploads). Images embed
+  directly in Discord; for videos Discord may show a download link instead of an inline
+  player – downloading always works either way.
 - **Token:** If it expires or you leak it by accident, delete/recreate it in GitHub
   Developer settings and paste the new one under ⚙.
 - **Phone:** Just open the site in your phone's browser – the 📁 button opens the
