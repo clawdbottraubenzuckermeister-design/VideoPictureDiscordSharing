@@ -1,102 +1,101 @@
-# 📤 Datei-Share – Discord-Umweg für große Videos & Bilder
+# 📤 File-Share – a Discord workaround for big videos & images
 
-Eine kleine GitHub-Pages-Seite, mit der du **Videos und Bilder bis 2 GB** teilen kannst,
-ohne am Discord-Upload-Limit zu scheitern.
+A tiny GitHub Pages site that lets you share **videos and images up to 2 GB**,
+so you never hit Discord's upload limit again.
 
-**So funktioniert es:**
-- Die Seite zeigt **immer nur die neueste hochgeladene Datei** – direkt abspielbar und herunterladbar.
-- Beim Hochladen wird die **alte Datei automatisch gelöscht** (kein Datenmüll).
-- Upload per **Button oder Drag & Drop**, von jedem Gerät (auch Handy).
-- **🗑 Leeren**-Knopf löscht die aktuelle Datei sofort.
-- **🔗 Discord-Link kopieren** gibt dir einen Link, den Discord **direkt als Video abspielt**.
+**What it does:**
+- The page always shows **only the newest uploaded file** – playable and downloadable right there.
+- Uploading a new file **automatically deletes the old one** (no clutter).
+- Upload by **button or drag & drop**, from any device (phone included).
+- A **🗑 Clear** button wipes the current file instantly.
+- A **🔗 Copy Discord link** button gives you a link Discord **plays as a video right in the chat**.
 
-Die Dateien werden als *Release-Assets* in deinem GitHub-Repository gespeichert –
-deshalb funktionieren auch große Dateien (GitHub erlaubt dort bis 2 GB pro Datei).
-
----
-
-## 🛠 Einmalige Einrichtung (ca. 5 Minuten)
-
-### 1. GitHub-Repository erstellen
-
-1. Auf [github.com](https://github.com) einloggen (ggf. kostenloses Konto erstellen).
-2. Oben rechts **+** → **New repository**.
-3. Name z. B. `datei-share`, Sichtbarkeit **Public** (nötig für GitHub Pages im Gratis-Tarif).
-4. **Create repository** klicken.
-
-### 2. Diese Dateien hochladen
-
-Entweder über die GitHub-Webseite: **uploading an existing file** anklicken und
-`index.html`, `style.css`, `app.js`, `.nojekyll` und `README.md` hineinziehen → **Commit changes**.
-
-Oder per Git aus diesem Ordner (das lokale Repo ist schon vorbereitet):
-
-```
-git remote add origin https://github.com/DEIN-NAME/datei-share.git
-git push -u origin main
-```
-
-### 3. GitHub Pages aktivieren
-
-1. Im Repository: **Settings** → **Pages** (linke Seitenleiste).
-2. Unter *Build and deployment*: Source = **Deploy from a branch**,
-   Branch = **main**, Ordner = **/ (root)** → **Save**.
-3. Nach 1–2 Minuten ist deine Seite erreichbar unter:
-   `https://DEIN-NAME.github.io/datei-share/`
-
-**Das ist der Link, den du weitergibst.** Wer ihn öffnet, sieht immer die neueste Datei.
-
-### 4. Upload-Token erstellen (nur für dich)
-
-Damit **nur du** hochladen und löschen kannst, brauchst du ein GitHub-Token:
-
-1. GitHub → Profilbild oben rechts → **Settings** → ganz unten **Developer settings**.
-2. **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
-3. Einstellungen:
-   - **Token name:** z. B. `datei-share`
-   - **Expiration:** z. B. 1 Jahr (danach einfach neues Token erstellen)
-   - **Repository access:** *Only select repositories* → dein `datei-share`-Repo auswählen
-   - **Permissions → Repository permissions → Contents:** **Read and write**
-4. **Generate token** und das Token (`github_pat_…`) kopieren.
-5. Deine Seite öffnen → **⚙** oben rechts → Token einfügen → **Speichern**.
-
-Das machst du **einmal pro eigenem Gerät** (PC, Handy, …). Das Token bleibt nur im
-Browser deines Geräts gespeichert und landet nie auf der Seite oder im Repo.
+Files are stored as *release assets* in your GitHub repository – that's why big files
+work (GitHub allows up to 2 GB per release asset).
 
 ---
 
-## 🚀 Benutzung
+## 🛠 One-time setup (about 5 minutes)
 
-1. Seite öffnen → Video/Bild per **Drag & Drop** hineinziehen oder **📁 Datei auswählen**.
-2. Warten, bis der Fortschrittsbalken durch ist. Die alte Datei wird dabei automatisch gelöscht.
-3. **🔗 Discord-Link kopieren** drücken und den Link in Discord einfügen →
-   das Video wird dort direkt abgespielt.
-4. Nach dem Chat: **🗑 Leeren** drücken, dann ist die Seite wieder leer.
+Your repository already exists:
+`https://github.com/clawdbottraubenzuckermeister-design/VideoPictureDiscordSharing`
 
-### Zwei Arten von Links – kurz erklärt
+### Step 1 – Make sure the files are in the repo
 
-| Link | Wofür |
+The site files (`index.html`, `style.css`, `app.js`, `.nojekyll`, `README.md`) are pushed
+to the `main` branch. Open the repo on GitHub and check they are listed. Done ✔
+
+### Step 2 – Turn on GitHub Pages
+
+1. In your repository, click **Settings** (top menu).
+2. In the left sidebar, click **Pages**.
+3. Under **Build and deployment**:
+   - **Source:** *Deploy from a branch*
+   - **Branch:** *main*  ·  Folder: **/ (root)**
+   - Click **Save**.
+4. Wait 1–2 minutes, then refresh the Pages page. Your site is live at:
+
+   **`https://clawdbottraubenzuckermeister-design.github.io/VideoPictureDiscordSharing/`**
+
+That URL is the link you give people. Anyone who opens it always sees the newest file.
+
+### Step 3 – Create your upload token (only for you)
+
+So that **only you** can upload and delete, you need a GitHub token:
+
+1. Click your **profile picture** (top right) → **Settings**.
+2. Scroll all the way down → **Developer settings** (left sidebar).
+3. **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
+4. Fill in:
+   - **Token name:** e.g. `file-share`
+   - **Expiration:** e.g. 90 days or 1 year (when it expires, just make a new one)
+   - **Repository access:** *Only select repositories* → pick
+     **VideoPictureDiscordSharing**
+   - **Permissions** → **Repository permissions** → **Contents** → set to
+     **Read and write**
+5. Click **Generate token** and **copy** the token (`github_pat_…`). You won't see it again.
+
+### Step 4 – Paste the token into the site
+
+1. Open your site: `https://clawdbottraubenzuckermeister-design.github.io/VideoPictureDiscordSharing/`
+2. Click the **⚙** (gear) in the top-right corner.
+3. Paste your token into the **GitHub token** field → **Save**.
+
+Do this **once per device you upload from** (PC, phone, …). The token is stored only in
+that device's browser and is never published on the site or in the repo.
+
+---
+
+## 🚀 How to use it
+
+1. Open the site → drag a video/image onto it, or click **📁 Choose file**.
+2. Wait for the progress bar to finish. The old file is deleted automatically.
+3. Click **🔗 Copy Discord link** and paste it into Discord → the video plays right
+   in the chat.
+4. After the chat: click **🗑 Clear** and the page is empty again.
+
+### Two kinds of links – quick explanation
+
+| Link | What it's for |
 |---|---|
-| **Seiten-Link** (`…github.io/datei-share/`) | Einmal an eine Person schicken – zeigt im Browser **immer die neueste Datei**. |
-| **Discord-Link** (Button auf der Seite) | Für jedes neue Video **neu kopieren** und in Discord posten – nur so spielt Discord das Video direkt im Chat ab. |
+| **Page link** (`…github.io/VideoPictureDiscordSharing/`) | Send it to a person once – in a browser it always shows the newest file. |
+| **Discord link** (the button on the page) | Copy it **fresh for each new video** and paste into Discord – only this makes Discord play the video inline. |
 
-**Warum zwei Links?** Discord speichert die Vorschau eines Links dauerhaft im Cache.
-Würde immer derselbe Link gepostet, würde Discord ewig das *alte* Video zeigen.
-Der Discord-Link ist deshalb für jede Datei einzigartig – ein Klick auf den Button,
-einfügen, fertig.
+**Why two links?** Discord permanently caches the preview of a link. If you always posted
+the same link, Discord would keep showing the *old* video forever. The Discord link is
+therefore unique per file – one click on the button, paste, done.
 
 ---
 
-## ⚠️ Gut zu wissen
+## ⚠️ Good to know
 
-- **Privatsphäre:** Das Repository ist öffentlich. Es gibt keine Passwörter – wer den
-  Link kennt (oder dein GitHub-Profil durchstöbert), kann die aktuelle Datei sehen.
-  Für private Handyvideos an eine Person ist das meist okay, aber lade nichts wirklich
-  Sensibles hoch. Der **🗑 Leeren**-Knopf entfernt die Datei sofort und endgültig.
-- **Limits:** max. 2 GB pro Datei (GitHub-Limit). Bei sehr großen Videos zeigt Discord
-  eventuell nur einen Download-Link statt des eingebetteten Players – herunterladen
-  geht aber immer.
-- **Token:** Falls das Token abläuft oder du es versehentlich teilst: In den GitHub
-  Developer settings löschen/neu erstellen und unter ⚙ neu eintragen.
-- **Handy:** Einfach die Seite im Handy-Browser öffnen – der 📁-Button öffnet die
-  Galerie/Kamera. Token vorher einmal unter ⚙ eintragen.
+- **Privacy:** The repository is public. There are no passwords – anyone who has the link
+  (or browses your GitHub profile) can see the current file. That's usually fine for phone
+  videos sent to one person, but don't upload anything truly sensitive. The **🗑 Clear**
+  button removes the file immediately and permanently.
+- **Limits:** max 2 GB per file (GitHub's limit). For very large videos Discord may show
+  only a download link instead of the inline player – downloading always works.
+- **Token:** If it expires or you leak it by accident, delete/recreate it in GitHub
+  Developer settings and paste the new one under ⚙.
+- **Phone:** Just open the site in your phone's browser – the 📁 button opens the
+  gallery/camera. Enter your token once under ⚙ first.
