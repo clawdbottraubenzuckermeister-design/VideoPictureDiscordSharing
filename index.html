@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Datei-Share</title>
+  <meta property="og:title" content="Datei-Share">
+  <meta property="og:description" content="Geteilte Datei ansehen und herunterladen">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%A4%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <header>
+    <h1>📤 Datei-Share</h1>
+    <div class="header-actions">
+      <button id="btnRefresh" class="icon-btn" title="Aktualisieren">↻</button>
+      <button id="btnSettings" class="icon-btn" title="Einstellungen">⚙</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Anzeige der aktuellen Datei -->
+    <section id="viewerCard" class="card">
+      <div id="mediaBox">
+        <div id="emptyState">
+          <div class="empty-icon">📭</div>
+          <p>Gerade ist nichts geteilt.</p>
+        </div>
+      </div>
+      <div id="metaLine" hidden></div>
+      <div id="actionRow" hidden>
+        <a id="btnDownload" class="btn" href="#" download>⬇ Herunterladen</a>
+        <button id="btnCopyDiscord" class="btn primary">🔗 Discord-Link kopieren</button>
+        <button id="btnClear" class="btn danger owner-only">🗑 Leeren</button>
+      </div>
+    </section>
+
+    <!-- Upload-Bereich (nur sichtbar, wenn ein Token hinterlegt ist) -->
+    <section id="uploadCard" class="card owner-only">
+      <div id="dropZone">
+        <p class="drop-title">Video oder Bild hierher ziehen</p>
+        <p class="drop-or">oder</p>
+        <button id="btnPick" class="btn primary big">📁 Datei auswählen</button>
+        <input type="file" id="fileInput" accept="video/*,image/*" hidden>
+        <p class="hint">bis 2&nbsp;GB · die vorherige Datei wird automatisch ersetzt</p>
+      </div>
+      <div id="progressWrap" hidden>
+        <div class="progress-track"><div id="progressBar"></div></div>
+        <span id="progressText">0&nbsp;%</span>
+      </div>
+    </section>
+
+    <p id="ownerHint" class="foot" hidden>
+      Du bist der Besitzer dieser Seite? Hinterlege dein GitHub-Token unter ⚙, um hochladen zu können.
+    </p>
+  </main>
+
+  <!-- Overlay beim Drag & Drop -->
+  <div id="dropOverlay" hidden><span>Loslassen zum Hochladen</span></div>
+
+  <!-- Toast-Meldungen -->
+  <div id="toast" hidden></div>
+
+  <!-- Einstellungen -->
+  <dialog id="settingsDialog">
+    <form method="dialog" id="settingsForm">
+      <h2>⚙ Einstellungen</h2>
+      <label>
+        GitHub-Benutzername
+        <input type="text" id="inpOwner" autocomplete="off" spellcheck="false" placeholder="z. B. maxmustermann">
+      </label>
+      <label>
+        Repository-Name
+        <input type="text" id="inpRepo" autocomplete="off" spellcheck="false" placeholder="z. B. datei-share">
+      </label>
+      <label>
+        GitHub-Token (nur auf deinen eigenen Geräten eintragen)
+        <input type="password" id="inpToken" autocomplete="off" placeholder="github_pat_…">
+      </label>
+      <p class="dialog-hint">
+        Das Token wird nur lokal in diesem Browser gespeichert (localStorage) und niemals
+        auf der Seite veröffentlicht. Anleitung zum Erstellen steht in der README.
+      </p>
+      <div class="dialog-actions">
+        <button type="button" id="btnRemoveToken" class="btn danger">Token entfernen</button>
+        <button type="submit" id="btnSaveSettings" class="btn primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
