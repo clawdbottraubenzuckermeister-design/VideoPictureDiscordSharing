@@ -1,21 +1,29 @@
 /*
- * Datei-Share – Discord-Umweg für große Videos/Bilder.
+ * Datei-Share – Discord-Umweg für Videos/Bilder.
  *
- * Speicherprinzip: Die Datei wird über die GitHub-"Contents"-API als normale
- * Datei im Ordner "uploads/" des Repos abgelegt. Dieser Weg funktioniert – im
- * Gegensatz zum Release-Upload (uploads.github.com) – direkt aus dem Browser,
- * weil api.github.com CORS erlaubt. Grenze: 100 MB pro Datei (GitHub-Limit).
+ * Hybrid-Speicher:
+ *   • Dateien bis 100 MB  -> GitHub Contents-API, Ordner uploads/ (dauerhaft).
+ *   • Dateien 100 MB–1 GB -> Litterbox (temporär, laufen nach 72 h ab).
  *
- * Die Seite zeigt immer nur die neueste Datei; beim Upload werden alle älteren
- * Dateien im uploads-Ordner gelöscht.
+ * In beiden Fällen wird im Repo eine winzige Zeiger-Datei "current.json"
+ * abgelegt, die auf die aktuelle Datei verweist. Die Seite liest nur diesen
+ * Zeiger und zeigt immer die neueste Datei – so bleibt der Seiten-Link fest,
+ * auch wenn die große Datei woanders liegt.
+ *
+ * Warum nicht direkt GitHub-Release-Assets (bis 2 GB)? uploads.github.com
+ * erlaubt keine Browser-Uploads (kein CORS). Litterbox schon.
  */
 
 const API = "https://api.github.com";
 const UPLOAD_DIR = "uploads";
-const MAX_SIZE = 100 * 1024 * 1024; // 100 MB (GitHub-Limit pro Datei)
+const POINTER = "current.json";
 
-// Formate, die der Browser direkt anzeigen/abspielen kann. Alles andere wird
-// als Download-Karte dargestellt (hochladen lässt sich trotzdem jedes Format).
+const GITHUB_MAX = 100 * 1024 * 1024;        // 100 MB – GitHub-Limit pro Datei
+const LITTERBOX_MAX = 1024 * 1024 * 1024;    // 1 GB  – Litterbox-Limit
+const LITTERBOX_API = "https://litterbox.catbox.moe/resources/internals/api.php";
+const LITTERBOX_TIME = "72h";                // maximale Haltbarkeit
+const LITTERBOX_TTL = 72 * 60 * 60 * 1000;
+
 const VIDEO_EXT = ["mp4", "webm", "ogv", "ogg", "mov", "m4v"];
 const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif"];
 
@@ -28,13 +36,11 @@ const els = {};
   "inpRepo", "inpToken", "btnRemoveToken", "ownerHint", "uploadCard",
 ].forEach((id) => (els[id] = document.getElementById(id)));
 
-let currentFile = null;
+let currentItem = null;
 let lastLoad = 0;
 
 /* ---------- Konfiguration ---------- */
 
-// Auf GitHub Pages lassen sich Benutzer und Repo direkt aus der URL ablesen,
-// damit Empfänger ohne jede Einrichtung zuschauen können.
 function configFromUrl() {
   const host = location.hostname;
   if (!host.endsWith(".github.io")) return null;
@@ -51,7 +57,7 @@ function getConfig() {
   return { owner, repo, token };
 }
 
-/* ---------- API-Helfer ---------- */
+/* ---------- GitHub-Helfer ---------- */
 
 function contentsUrl(path) {
   const { owner, repo } = getConfig();
@@ -66,51 +72,76 @@ function authHeaders(extra = {}) {
   return h;
 }
 
-// Liste der Dateien im uploads-Ordner (neueste zuerst). Leer, falls Ordner fehlt.
-async function listFiles() {
+function b64encodeUtf8(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function b64decodeUtf8(b64) {
+  return decodeURIComponent(escape(atob(b64.replace(/\s/g, ""))));
+}
+
+// Zeiger lesen (funktioniert auch ohne Token – für Empfänger). Liefert sha zum
+// späteren Überschreiben/Löschen.
+async function readPointer() {
+  const res = await fetch(contentsUrl(POINTER), {
+    headers: authHeaders(),
+    cache: "no-store",
+  });
+  if (res.status === 404) return { item: null, sha: null };
+  if (!res.ok) throw new Error(`GitHub-API-Fehler (${res.status})`);
+  const data = await res.json();
+  try {
+    return { item: JSON.parse(b64decodeUtf8(data.content)), sha: data.sha };
+  } catch {
+    return { item: null, sha: data.sha };
+  }
+}
+
+async function writePointer(item, prevSha) {
+  const body = {
+    message: "Datei-Share: aktuelle Datei aktualisiert",
+    content: b64encodeUtf8(JSON.stringify(item)),
+  };
+  if (prevSha) body.sha = prevSha;
+  const res = await fetch(contentsUrl(POINTER), {
+    method: "PUT",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("Token ungültig oder ohne „Contents: Read and write“ – unter ⚙ prüfen.");
+    }
+    throw new Error(`Zeiger konnte nicht gespeichert werden (${res.status})`);
+  }
+}
+
+async function deletePointer(sha) {
+  if (!sha) return;
+  await fetch(contentsUrl(POINTER), {
+    method: "DELETE",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ message: "Datei-Share: geleert", sha }),
+  });
+}
+
+// Alle Dateien im uploads-Ordner (optional eine ausnehmen) löschen.
+async function cleanUploads(keepPath) {
   const res = await fetch(contentsUrl(UPLOAD_DIR), {
     headers: authHeaders(),
     cache: "no-store",
   });
-  if (res.status === 404) return [];
-  if (!res.ok) throw new Error(`GitHub-API-Fehler (${res.status})`);
-  const data = await res.json();
-  const arr = Array.isArray(data) ? data : [data];
-  return arr
-    .filter((e) => e.type === "file")
-    .map(normalize)
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0));
-}
-
-function normalize(entry) {
-  const m = entry.name.match(/^(\d{10,})-/);
-  return {
-    name: entry.name,
-    path: entry.path,
-    sha: entry.sha,
-    size: entry.size,
-    url: entry.download_url,
-    type: inferType(entry.name),
-    ts: m ? Number(m[1]) : 0,
-  };
-}
-
-function inferType(name) {
-  const ext = (name.split(".").pop() || "").toLowerCase();
-  if (VIDEO_EXT.includes(ext)) return "video";
-  if (IMAGE_EXT.includes(ext)) return "image";
-  return "file";
-}
-
-async function deleteFile(file) {
-  const res = await fetch(contentsUrl(file.path), {
-    method: "DELETE",
-    headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ message: `Datei-Share: ${file.name} entfernt`, sha: file.sha }),
-  });
-  if (!res.ok && res.status !== 404) {
-    throw new Error(`Löschen fehlgeschlagen (${res.status})`);
-  }
+  if (!res.ok) return; // 404 = Ordner leer/fehlt
+  const list = await res.json();
+  const files = (Array.isArray(list) ? list : []).filter(
+    (e) => e.type === "file" && e.path !== keepPath,
+  );
+  await Promise.allSettled(files.map((f) =>
+    fetch(contentsUrl(f.path), {
+      method: "DELETE",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ message: `Datei-Share: ${f.name} entfernt`, sha: f.sha }),
+    }),
+  ));
 }
 
 /* ---------- Anzeige ---------- */
@@ -121,15 +152,25 @@ function formatSize(bytes) {
   return Math.max(1, Math.round(bytes / 1024)) + " KB";
 }
 
-function displayName(name) {
-  return name.replace(/^\d{10,}-/, "");
+function inferType(name) {
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (VIDEO_EXT.includes(ext)) return "video";
+  if (IMAGE_EXT.includes(ext)) return "image";
+  return "file";
 }
 
-function render(file) {
-  currentFile = file;
+function formatRemaining(ms) {
+  const h = Math.floor(ms / 3600000);
+  if (h >= 1) return `${h} h`;
+  const m = Math.max(1, Math.floor(ms / 60000));
+  return `${m} min`;
+}
+
+function render(item) {
+  currentItem = item;
   els.mediaBox.querySelectorAll("video, img, .file-card").forEach((n) => n.remove());
 
-  if (!file) {
+  if (!item) {
     els.emptyState.hidden = false;
     els.metaLine.hidden = true;
     els.actionRow.hidden = true;
@@ -137,39 +178,43 @@ function render(file) {
   }
 
   els.emptyState.hidden = true;
+  const type = inferType(item.name);
 
-  if (file.type === "video") {
+  if (type === "video") {
     const v = document.createElement("video");
     v.controls = true;
     v.playsInline = true;
     v.preload = "metadata";
-    v.src = file.url;
+    v.src = item.url;
     els.mediaBox.appendChild(v);
-  } else if (file.type === "image") {
+  } else if (type === "image") {
     const img = document.createElement("img");
-    img.alt = displayName(file.name);
-    img.src = file.url;
+    img.alt = item.name;
+    img.src = item.url;
     els.mediaBox.appendChild(img);
   } else {
     const div = document.createElement("div");
     div.className = "file-card";
     div.style.padding = "40px 16px";
-    div.textContent = `📄 ${displayName(file.name)}`;
+    div.textContent = `📄 ${item.name}`;
     els.mediaBox.appendChild(div);
   }
 
-  let meta = `${displayName(file.name)} · ${formatSize(file.size)}`;
-  if (file.ts) {
-    const when = new Date(file.ts).toLocaleString("de-DE", {
+  let meta = `${item.name} · ${formatSize(item.size)}`;
+  if (item.ts) {
+    meta += " · " + new Date(item.ts).toLocaleString("de-DE", {
       dateStyle: "medium",
       timeStyle: "short",
     });
-    meta += ` · hochgeladen ${when}`;
+  }
+  if (item.kind === "litterbox" && item.expires) {
+    const left = item.expires - Date.now();
+    meta += left > 0 ? ` · läuft in ${formatRemaining(left)} ab` : " · abgelaufen";
   }
   els.metaLine.textContent = meta;
   els.metaLine.hidden = false;
   els.actionRow.hidden = false;
-  els.btnDownload.href = file.url;
+  els.btnDownload.href = item.url;
 }
 
 async function loadLatest({ silent = false } = {}) {
@@ -183,8 +228,12 @@ async function loadLatest({ silent = false } = {}) {
   }
   lastLoad = Date.now();
   try {
-    const files = await listFiles();
-    render(files[0] || null);
+    const { item } = await readPointer();
+    if (item?.kind === "litterbox" && item.expires && Date.now() > item.expires) {
+      render(null); // abgelaufen – nichts mehr anzeigen
+      return;
+    }
+    render(item || null);
   } catch (err) {
     if (!silent) toast(err.message, "error");
   }
@@ -197,7 +246,6 @@ function sanitizeName(name) {
   return (clean || "datei").slice(-120);
 }
 
-// Datei als Base64 einlesen (ohne data:-Präfix). Liefert Lese-Fortschritt.
 function fileToBase64(file, onProgress) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -213,8 +261,8 @@ function fileToBase64(file, onProgress) {
   });
 }
 
-// PUT über die Contents-API mit Upload-Fortschritt (XHR statt fetch).
-function putContent(path, base64, message, onProgress) {
+// PUT einer Datei über die Contents-API mit Upload-Fortschritt.
+function putFile(path, base64, message, onProgress) {
   const { token } = getConfig();
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -231,13 +279,35 @@ function putContent(path, base64, message, onProgress) {
       } else if (xhr.status === 401 || xhr.status === 403) {
         reject(new Error("Token ungültig oder ohne „Contents: Read and write“ – unter ⚙ prüfen."));
       } else if (xhr.status === 413 || xhr.status === 422) {
-        reject(new Error("Datei zu groß für diesen Weg (Grenze 100 MB)."));
+        reject(new Error("Datei zu groß für GitHub (Grenze 100 MB)."));
       } else {
         reject(new Error(`Upload fehlgeschlagen (${xhr.status})`));
       }
     };
     xhr.onerror = () => reject(new Error("Netzwerkfehler beim Upload."));
     xhr.send(JSON.stringify({ message, content: base64 }));
+  });
+}
+
+// Upload zu Litterbox (temporär) mit Fortschritt. Liefert die Direkt-URL.
+function uploadLitterbox(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append("reqtype", "fileupload");
+    fd.append("time", LITTERBOX_TIME);
+    fd.append("fileToUpload", file);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", LITTERBOX_API);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      const body = (xhr.responseText || "").trim();
+      if (xhr.status === 200 && /^https?:\/\//.test(body)) resolve(body);
+      else reject(new Error(`Litterbox-Upload fehlgeschlagen (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Netzwerkfehler beim Litterbox-Upload."));
+    xhr.send(fd);
   });
 }
 
@@ -248,37 +318,43 @@ async function handleUpload(file) {
     toast("Zum Hochladen bitte unter ⚙ dein GitHub-Token eintragen.", "error");
     return;
   }
-  if (file.size > MAX_SIZE) {
-    toast(`Datei ist ${formatSize(file.size)} groß – GitHub erlaubt hier max. 100 MB.`, "error", 6000);
+  if (file.size > LITTERBOX_MAX) {
+    toast(`Datei ist ${formatSize(file.size)} groß – maximal 1 GB möglich.`, "error", 6000);
     return;
   }
 
+  const useLitterbox = file.size > GITHUB_MAX;
   els.progressWrap.hidden = false;
   setProgress(0, "Vorbereiten");
 
   try {
-    // Ältere Dateien schon einmal merken, um sie nachher zu entfernen.
-    const existing = await listFiles().catch(() => []);
+    const { sha: prevSha } = await readPointer().catch(() => ({ sha: null }));
+    const ts = Date.now();
+    let item;
 
-    const base64 = await fileToBase64(file, (p) => setProgress(p * 0.35, "Vorbereiten"));
+    if (useLitterbox) {
+      const url = await uploadLitterbox(file, (p) => setProgress(p, "Hochladen"));
+      item = { kind: "litterbox", name: file.name, url, size: file.size, ts, expires: ts + LITTERBOX_TTL };
+    } else {
+      const base64 = await fileToBase64(file, (p) => setProgress(p * 0.35, "Vorbereiten"));
+      const path = `${UPLOAD_DIR}/${ts}-${sanitizeName(file.name)}`;
+      const created = await putFile(
+        path, base64, `Datei-Share: ${file.name} hochgeladen`,
+        (p) => setProgress(0.35 + p * 0.65, "Hochladen"),
+      );
+      item = { kind: "github", name: file.name, url: created.download_url, size: file.size, ts, path };
+    }
 
-    const fileName = `${Date.now()}-${sanitizeName(file.name)}`;
-    const path = `${UPLOAD_DIR}/${fileName}`;
-    const created = await putContent(
-      path,
-      base64,
-      `Datei-Share: ${displayName(fileName)} hochgeladen`,
-      (p) => setProgress(0.35 + p * 0.65, "Hochladen"),
-    );
     setProgress(1, "Fertig");
+    await writePointer(item, prevSha);
+    // Alte GitHub-Dateien aufräumen (bei Litterbox alle, bei GitHub alle außer der neuen).
+    await cleanUploads(item.kind === "github" ? item.path : null);
 
-    // Alte Dateien entfernen – es soll immer nur die neueste existieren.
-    await Promise.allSettled(
-      existing.filter((f) => f.path !== path).map((f) => deleteFile(f)),
-    );
-
-    render(normalize(created));
-    toast("✅ Hochgeladen! „Discord-Link kopieren“ drücken und in Discord einfügen.", "success", 5000);
+    render(item);
+    const extra = item.kind === "litterbox"
+      ? " (läuft in 72 h automatisch ab)"
+      : "";
+    toast(`✅ Hochgeladen${extra}! „Discord-Link kopieren“ drücken.`, "success", 5000);
   } catch (err) {
     toast(err.message, "error", 6000);
   } finally {
@@ -289,7 +365,7 @@ async function handleUpload(file) {
 function setProgress(frac, label) {
   const pct = Math.round(frac * 100);
   els.progressBar.style.width = pct + "%";
-  els.progressText.textContent = label ? `${label} ${pct} %` : pct + " %";
+  els.progressText.textContent = label ? `${label} ${pct} %` : pct + " %";
 }
 
 /* ---------- Leeren ---------- */
@@ -297,13 +373,9 @@ function setProgress(frac, label) {
 async function clearAll() {
   if (!confirm("Aktuelle Datei wirklich löschen?")) return;
   try {
-    const files = await listFiles();
-    if (!files.length) {
-      render(null);
-      toast("Ist bereits leer.");
-      return;
-    }
-    await Promise.allSettled(files.map((f) => deleteFile(f)));
+    const { sha } = await readPointer();
+    await deletePointer(sha);
+    await cleanUploads(null);
     render(null);
     toast("🗑 Gelöscht – die Seite ist jetzt leer.", "success");
   } catch (err) {
@@ -384,11 +456,11 @@ els.btnRefresh.addEventListener("click", () => loadLatest());
 els.btnClear.addEventListener("click", clearAll);
 
 els.btnCopyDiscord.addEventListener("click", async () => {
-  if (!currentFile) return;
-  const ok = await copyText(currentFile.url);
+  if (!currentItem) return;
+  const ok = await copyText(currentItem.url);
   toast(ok
     ? "🔗 Link kopiert! In Discord einfügen – Bilder werden dort direkt angezeigt."
-    : "Kopieren fehlgeschlagen – Link: " + currentFile.url,
+    : "Kopieren fehlgeschlagen – Link: " + currentItem.url,
     ok ? "success" : "error", 5000);
 });
 
@@ -398,7 +470,6 @@ els.fileInput.addEventListener("change", () => {
   els.fileInput.value = "";
 });
 
-// Drag & Drop auf der ganzen Seite
 let dragDepth = 0;
 window.addEventListener("dragenter", (e) => {
   e.preventDefault();
@@ -425,7 +496,6 @@ window.addEventListener("drop", (e) => {
   if (file) handleUpload(file);
 });
 
-// Beim Zurückkehren zum Tab automatisch aktualisieren (max. alle 15 s)
 window.addEventListener("focus", () => {
   if (Date.now() - lastLoad > 15000) loadLatest({ silent: true });
 });

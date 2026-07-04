@@ -1,7 +1,7 @@
 # 📤 File-Share – a Discord workaround for videos & images
 
-A tiny GitHub Pages site that lets you share **any file up to 100 MB** – far above
-Discord's free upload limit (only ~10 MB), so your phone photos and clips go through.
+A tiny GitHub Pages site that lets you share **files up to 1 GB** – far above Discord's
+free upload limit (only ~10 MB), so your phone photos and clips go through.
 
 **What it does:**
 - The page always shows **only the newest uploaded file** – playable and downloadable right there.
@@ -10,15 +10,24 @@ Discord's free upload limit (only ~10 MB), so your phone photos and clips go thr
 - A **🗑 Clear** button wipes the current file instantly.
 - A **🔗 Copy Discord link** button gives you a direct link (images embed right in the chat).
 
-Files are stored as normal files in the `uploads/` folder of your repository, uploaded
-straight from the browser via GitHub's Contents API.
+### Where files are stored (automatic – you don't choose)
 
-> **Why 100 MB and not more?** A browser can only upload to GitHub through the Contents
-> API, and GitHub blocks any single file over 100 MB. The bigger "release asset" path
-> (up to 2 GB) refuses uploads from a browser (no CORS on `uploads.github.com`), so it
-> can't be used from a plain static page. 100 MB still covers phone photos and short
-> videos comfortably. If you regularly need multi-hundred-MB videos, you'd need a small
-> helper service (e.g. a free Cloudflare Worker) as an upload proxy – ask and it can be added.
+The page picks the storage automatically based on file size:
+
+| File size | Stored on | Kept |
+|---|---|---|
+| **up to 100 MB** | your GitHub repo (`uploads/` folder) | permanently (until replaced/cleared) |
+| **100 MB – 1 GB** | [Litterbox](https://litterbox.catbox.moe) (a free temporary host) | **auto-deletes after 72 hours** |
+
+Either way, a tiny pointer file (`current.json`) is written to your repo so the page always
+knows the newest file. That's why **your page link never changes**, even for big files.
+
+> **Why two backends?** A browser can only upload to services that allow it (CORS). GitHub's
+> Contents API allows it but caps files at 100 MB. GitHub's 2 GB "release asset" path refuses
+> browser uploads (no CORS on `uploads.github.com`). Litterbox allows browser uploads up to
+> 1 GB, but only temporarily. Combining them gives permanent small files **and** big files.
+> If you ever need permanent multi-GB files, that requires your own storage (e.g. a free
+> Cloudflare R2 bucket) – ask and it can be added.
 
 ---
 
@@ -100,9 +109,13 @@ unique per file – one click on the button, paste, done.
   (or browses your GitHub profile) can see the current file. That's usually fine for phone
   videos sent to one person, but don't upload anything truly sensitive. The **🗑 Clear**
   button removes the file immediately and permanently.
-- **Limits:** max 100 MB per file (GitHub's hard limit for browser uploads). Images embed
-  directly in Discord; for videos Discord may show a download link instead of an inline
-  player – downloading always works either way.
+- **Limits:** max 1 GB per file. Files up to 100 MB stay in your repo permanently; larger
+  files go to Litterbox and **auto-delete after 72 hours** – so share big videos soon after
+  uploading. Images embed directly in Discord; for videos Discord may show a download link
+  instead of an inline player – downloading always works either way.
+- **Big files & privacy:** Litterbox is a third-party host; a big file sits at a random
+  public URL until it expires. Same "public if you have the link" level as the repo, but on
+  someone else's server – don't upload anything truly sensitive there.
 - **Token:** If it expires or you leak it by accident, delete/recreate it in GitHub
   Developer settings and paste the new one under ⚙.
 - **Phone:** Just open the site in your phone's browser – the 📁 button opens the
