@@ -289,8 +289,15 @@ function putFile(path, base64, message, onProgress) {
   });
 }
 
-// Upload zu Litterbox (temporär) mit Fortschritt. Liefert die Direkt-URL.
-function uploadLitterbox(file, onProgress) {
+// Upload zu Litterbox (temporär). Liefert die Direkt-URL.
+//
+// WICHTIG: Hier darf KEIN xhr.upload-Listener registriert werden. Sobald man das
+// tut, gilt die Anfrage laut CORS-Spezifikation als "nicht-simpel" und der Browser
+// schickt vorher einen OPTIONS-Preflight. Litterbox beantwortet OPTIONS aber mit
+// 405 -> Preflight scheitert -> "net::ERR_FAILED". Ohne Upload-Listener bleibt die
+// Anfrage simpel (multipart/form-data, keine Sonder-Header) und läuft ohne Preflight
+// durch. Der Preis: keine prozentgenaue Fortschrittsanzeige (dafür laufender Balken).
+function uploadLitterbox(file) {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append("reqtype", "fileupload");
@@ -298,9 +305,6 @@ function uploadLitterbox(file, onProgress) {
     fd.append("fileToUpload", file);
     const xhr = new XMLHttpRequest();
     xhr.open("POST", LITTERBOX_API);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(e.loaded / e.total);
-    };
     xhr.onload = () => {
       const body = (xhr.responseText || "").trim();
       if (xhr.status === 200 && /^https?:\/\//.test(body)) resolve(body);
@@ -333,7 +337,9 @@ async function handleUpload(file) {
     let item;
 
     if (useLitterbox) {
-      const url = await uploadLitterbox(file, (p) => setProgress(p, "Hochladen"));
+      // Litterbox liefert keinen Fortschritt (siehe uploadLitterbox) -> laufender Balken.
+      setIndeterminate("Große Datei wird hochgeladen…");
+      const url = await uploadLitterbox(file);
       item = { kind: "litterbox", name: file.name, url, size: file.size, ts, expires: ts + LITTERBOX_TTL };
     } else {
       const base64 = await fileToBase64(file, (p) => setProgress(p * 0.35, "Vorbereiten"));
@@ -363,9 +369,17 @@ async function handleUpload(file) {
 }
 
 function setProgress(frac, label) {
+  els.progressBar.classList.remove("indeterminate");
   const pct = Math.round(frac * 100);
   els.progressBar.style.width = pct + "%";
   els.progressText.textContent = label ? `${label} ${pct} %` : pct + " %";
+}
+
+// Unbestimmter, laufender Balken (wenn kein echter Fortschritt verfügbar ist).
+function setIndeterminate(label) {
+  els.progressBar.style.width = "";
+  els.progressBar.classList.add("indeterminate");
+  els.progressText.textContent = label || "Hochladen…";
 }
 
 /* ---------- Leeren ---------- */
