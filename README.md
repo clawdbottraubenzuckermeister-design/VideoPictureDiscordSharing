@@ -112,9 +112,21 @@ unique per file – one click on the button, paste, done.
   button removes the file immediately and permanently.
 - **Limits:** max 1 GB per file. Files up to 95 MB stay in your repo permanently; larger
   files go to Litterbox and **auto-delete after 72 hours** – so share big videos soon after
-  uploading. Images embed directly in Discord; **videos never get an inline player**, because
-  `raw.githubusercontent.com` serves every video as `application/octet-stream` with
-  `X-Content-Type-Options: nosniff`. Discord shows a download link – downloading always works.
+  uploading. Images embed directly in Discord.
+- **Storage target:** a switch under the upload area picks where a file goes. It sits on
+  **Auto** on every page load (GitHub while the file fits, Litterbox above that). Set it by
+  hand when one of the two services is having an outage.
+- **Video players in Discord** need three things to line up:
+  1. *Correct headers.* Litterbox serves `video/mp4` and honours range requests;
+     `raw.githubusercontent.com` serves every video as `application/octet-stream` with
+     `X-Content-Type-Options: nosniff`. **A video stored on GitHub can never get a player** –
+     only a download link. Pick Litterbox if the player matters more than permanence.
+  2. *Metadata at the front.* Phone cameras put the `moov` block at the end of the file, so a
+     player reading only the beginning finds nothing. `faststart.js` moves it to the front
+     before uploading – without re-encoding, and it leaves the file byte-length identical.
+  3. *A codec browsers can decode.* H.265/HEVC (`hvc1`) plays in no browser, so no player will
+     ever appear for it. The page detects this on upload and says so. Fix it at the source:
+     Samsung camera settings → turn off *"High efficiency video"* to record H.264 instead.
 - **Executables:** Litterbox blocks program files (`.exe`, `.jar`, `.scr`, …) with a
   "Bad file type" error. To share one that's over 95 MB, put it in a `.zip` first – zip
   archives are allowed. (Under 95 MB it goes to GitHub and any type is fine.)
