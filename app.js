@@ -362,6 +362,37 @@ function selectedTarget() {
   return el ? el.value : "auto";
 }
 
+// Dateitypen, bei denen sich der moov-Block verschieben laesst (ISO-BMFF).
+const FASTSTART_EXT = ["mp4", "m4v", "mov"];
+
+// Video so umsortieren, dass die Inhaltsangabe vorne steht – sonst bauen Dienste
+// wie Discord keinen Player, siehe faststart.js. Misslingt das, wird die
+// Originaldatei genommen: der Upload darf an dieser Optimierung nie scheitern.
+async function vorbereiten(file) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (!FASTSTART_EXT.includes(ext)) return { file, veraendert: false };
+  try {
+    setIndeterminate("Video wird vorbereitet…");
+
+    // H.265 kann kein Browser abspielen und damit auch kein Discord-Player.
+    // Umkodieren kaeme hier nicht in Frage (Minuten Rechenzeit auf dem Handy),
+    // also wird wenigstens erklaert, warum die Vorschau ausbleibt.
+    const codecs = await mp4Codecs(file);
+    if (mp4OhnePlayer(codecs)) {
+      toast(
+        "Hinweis: Dieses Video ist H.265 – dafür zeigt Discord nie einen Player, nur einen Link. "
+        + "Abhilfe: in den Kamera-Einstellungen „Videos mit hoher Effizienz“ ausschalten.",
+        "", 9000,
+      );
+    }
+
+    return await mp4Faststart(file);
+  } catch (err) {
+    console.warn("Faststart übersprungen:", err);
+    return { file, veraendert: false };
+  }
+}
+
 async function handleUpload(file) {
   const { owner, repo, token } = getConfig();
   if (!owner || !repo || !token) {
@@ -393,6 +424,8 @@ async function handleUpload(file) {
 
   try {
     const { sha: prevSha } = await readPointer().catch(() => ({ sha: null }));
+    const vorbereitet = await vorbereiten(file);
+    file = vorbereitet.file;
     const ts = Date.now();
     let item;
 
@@ -425,7 +458,8 @@ async function handleUpload(file) {
     const extra = item.kind === "litterbox"
       ? " (läuft in 72 h automatisch ab)"
       : "";
-    toast(`✅ Hochgeladen${extra}! „Discord-Link kopieren“ drücken.`, "success", 5000);
+    const vorschau = vorbereitet.veraendert ? " · für Vorschau vorbereitet" : "";
+    toast(`✅ Hochgeladen${extra}${vorschau}! „Discord-Link kopieren“ drücken.`, "success", 5000);
   } catch (err) {
     toast(err.message, "error", 6000);
   } finally {
