@@ -1,0 +1,89 @@
+# Haelt das Repository klein.
+#
+# Jede hochgeladene Datei bleibt fuer immer im Git-Verlauf, auch nachdem die Seite
+# sie aus dem aktuellen Stand geloescht hat. Nach vielen Videos waechst das Repo
+# dadurch auf mehrere Gigabyte. Dieser Workflow faltet den Verlauf dann auf einen
+# einzigen Commit zusammen - der Dateibestand bleibt exakt derselbe, nur die alten
+# Versionen verschwinden.
+#
+# Laeuft sonntags nachts und nur, wenn das Repo wirklich zu gross geworden ist.
+# Ueber "Actions" -> "Verlauf aufraeumen" -> "Run workflow" auch jederzeit von Hand.
+
+name: Verlauf aufraeumen
+
+on:
+  schedule:
+    - cron: "17 4 * * 0"   # jeden Sonntag um 04:17 UTC
+  workflow_dispatch:       # Knopf zum manuellen Ausloesen
+    inputs:
+      force:
+        description: "Auch unterhalb der Groessengrenze aufraeumen"
+        type: boolean
+        default: false
+
+# Verhindert, dass zwei Aufraeum-Laeufe gleichzeitig force-pushen.
+concurrency:
+  group: verlauf-aufraeumen
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+# Ab dieser .git-Groesse wird aufgeraeumt. GitHub empfiehlt unter 1 GB; bei 500 MB
+# ist noch reichlich Luft und der Workflow laeuft selten.
+env:
+  GRENZE_KB: 512000   # 500 MB
+
+jobs:
+  aufraeumen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repo mit vollem Verlauf holen
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Groesse pruefen
+        id: pruefen
+        run: |
+          groesse=$(du -sk .git | cut -f1)
+          commits=$(git rev-list --count HEAD)
+          echo "Verlauf: ${commits} Commits, .git = $((groesse / 1024)) MB"
+
+          if [ "$commits" -le 1 ]; then
+            echo "Nur ein Commit - nichts aufzuraeumen."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.force }}" = "true" ]; then
+            echo "Manuell erzwungen - wird aufgeraeumt."
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          elif [ "$groesse" -lt "${GRENZE_KB}" ]; then
+            echo "Unter $((GRENZE_KB / 1024)) MB - noch nichts zu tun."
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "Ueber $((GRENZE_KB / 1024)) MB - wird aufgeraeumt."
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verlauf auf einen Commit zusammenfalten
+        if: steps.pruefen.outputs.los == 'ja'
+        run: |
+          set -eu
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # --orphan uebernimmt den aktuellen Dateibestand unveraendert, nur ohne
+          # Vorgeschichte. Der Inhalt der Seite kann sich dabei nicht aendern.
+          git checkout --orphan aufgeraeumt
+          git add -A
+          git commit -m "Verlauf zusammengefaltet (automatische Wartung)"
+
+          # Sicherheitsnetz: der neue Stand muss dem alten exakt entsprechen.
+          if ! git diff --quiet "${GITHUB_SHA}" HEAD; then
+            echo "::error::Dateibestand weicht ab - Abbruch, es wird nichts gepusht."
+            exit 1
+          fi
+
+          git branch -D "${GITHUB_REF_NAME}"
+          git branch -m "${GITHUB_REF_NAME}"
+          git push -f origin "${GITHUB_REF_NAME}"
+          echo "Fertig - Verlauf steht jetzt auf einem Commit."

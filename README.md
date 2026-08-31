@@ -16,14 +16,15 @@ The page picks the storage automatically based on file size:
 
 | File size | Stored on | Kept |
 |---|---|---|
-| **up to 100 MB** | your GitHub repo (`uploads/` folder) | permanently (until replaced/cleared) |
-| **100 MB – 1 GB** | [Litterbox](https://litterbox.catbox.moe) (a free temporary host) | **auto-deletes after 72 hours** |
+| **up to 95 MB** | your GitHub repo (`uploads/` folder) | permanently (until replaced/cleared) |
+| **95 MB – 1 GB** | [Litterbox](https://litterbox.catbox.moe) (a free temporary host) | **auto-deletes after 72 hours** |
 
 Either way, a tiny pointer file (`current.json`) is written to your repo so the page always
 knows the newest file. That's why **your page link never changes**, even for big files.
 
 > **Why two backends?** A browser can only upload to services that allow it (CORS). GitHub's
-> Contents API allows it but caps files at 100 MB. GitHub's 2 GB "release asset" path refuses
+> Contents API allows it but caps files at 100 MB (we stop at 95 MB, since the Base64
+> encoding the API requires inflates the request by ~33 %). GitHub's 2 GB "release asset" path refuses
 > browser uploads (no CORS on `uploads.github.com`). Litterbox allows browser uploads up to
 > 1 GB, but only temporarily. Combining them gives permanent small files **and** big files.
 > If you ever need permanent multi-GB files, that requires your own storage (e.g. a free
@@ -109,13 +110,14 @@ unique per file – one click on the button, paste, done.
   (or browses your GitHub profile) can see the current file. That's usually fine for phone
   videos sent to one person, but don't upload anything truly sensitive. The **🗑 Clear**
   button removes the file immediately and permanently.
-- **Limits:** max 1 GB per file. Files up to 100 MB stay in your repo permanently; larger
+- **Limits:** max 1 GB per file. Files up to 95 MB stay in your repo permanently; larger
   files go to Litterbox and **auto-delete after 72 hours** – so share big videos soon after
-  uploading. Images embed directly in Discord; for videos Discord may show a download link
-  instead of an inline player – downloading always works either way.
+  uploading. Images embed directly in Discord; **videos never get an inline player**, because
+  `raw.githubusercontent.com` serves every video as `application/octet-stream` with
+  `X-Content-Type-Options: nosniff`. Discord shows a download link – downloading always works.
 - **Executables:** Litterbox blocks program files (`.exe`, `.jar`, `.scr`, …) with a
-  "Bad file type" error. To share one that's over 100 MB, put it in a `.zip` first – zip
-  archives are allowed. (Under 100 MB it goes to GitHub and any type is fine.)
+  "Bad file type" error. To share one that's over 95 MB, put it in a `.zip` first – zip
+  archives are allowed. (Under 95 MB it goes to GitHub and any type is fine.)
 - **After changes, hard-refresh:** if the page ever behaves like an old version, press
   **Ctrl+F5** once to bypass the browser cache.
 - **Big files & privacy:** Litterbox is a third-party host; a big file sits at a random

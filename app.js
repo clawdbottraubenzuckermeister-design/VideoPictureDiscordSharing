@@ -2,8 +2,8 @@
  * Datei-Share – Discord-Umweg für Videos/Bilder.
  *
  * Hybrid-Speicher:
- *   • Dateien bis 100 MB  -> GitHub Contents-API, Ordner uploads/ (dauerhaft).
- *   • Dateien 100 MB–1 GB -> Litterbox (temporär, laufen nach 72 h ab).
+ *   • Dateien bis 95 MB  -> GitHub Contents-API, Ordner uploads/ (dauerhaft).
+ *   • Alles darüber (bis 1 GB) -> Litterbox (temporär, läuft nach 72 h ab).
  *
  * In beiden Fällen wird im Repo eine winzige Zeiger-Datei "current.json"
  * abgelegt, die auf die aktuelle Datei verweist. Die Seite liest nur diesen
@@ -18,13 +18,17 @@ const API = "https://api.github.com";
 const UPLOAD_DIR = "uploads";
 const POINTER = "current.json";
 
-// GitHub-Contents-API verträgt praktisch nur ~50 MB (Base64 bläht +33 % auf,
-// darüber kommt 422 "too large to be processed"). Deshalb konservativ 25 MB:
-// darunter landet fast jedes Foto dauerhaft auf GitHub, alles Größere geht zu
-// Litterbox. Videos gehen IMMER zu Litterbox, weil sie von dort mit den richtigen
-// Headern (video/mp4 + Range) direkt in Discord eingebettet werden – raw.github
-// bettet Videos nicht ein.
-const GITHUB_MAX = 25 * 1024 * 1024;         // 25 MB – sicher für die Contents-API
+// GitHubs harte Grenze pro Datei ist 100 MB. Der Upload geht als Base64 durch die
+// Contents-API und bläht dabei um +33 % auf, deshalb 95 MB als Obergrenze. Sollte
+// GitHub eine Datei trotzdem ablehnen (413/422), fängt handleUpload das ab und
+// schiebt sie automatisch zu Litterbox.
+//
+// Videos gehen bewusst NICHT mehr pauschal zu Litterbox. Der frühere Grund war,
+// dass Discord Litterbox-Videos als Player einbettet und raw.github nicht – aber
+// raw.githubusercontent liefert jede mp4 als "application/octet-stream" mit
+// "X-Content-Type-Options: nosniff", ein Player entsteht dort also ohnehin nie.
+// Dauerhafter Speicher schlägt damit die 72-h-Ablaufzeit von Litterbox.
+const GITHUB_MAX = 95 * 1024 * 1024;         // 95 MB – Puffer unter GitHubs 100-MB-Grenze
 const LITTERBOX_MAX = 1024 * 1024 * 1024;    // 1 GB  – Litterbox-Limit
 const LITTERBOX_API = "https://litterbox.catbox.moe/resources/internals/api.php";
 const LITTERBOX_TIME = "72h";                // maximale Haltbarkeit
@@ -285,7 +289,7 @@ function putFile(path, base64, message, onProgress) {
       } else if (xhr.status === 401 || xhr.status === 403) {
         reject(new Error("Token ungültig oder ohne „Contents: Read and write“ – unter ⚙ prüfen."));
       } else if (xhr.status === 413 || xhr.status === 422) {
-        reject(new Error("Datei zu groß für GitHub (Grenze 100 MB)."));
+        reject(new Error("Datei zu groß für GitHub (Grenze 100 MB pro Datei)."));
       } else {
         reject(new Error(`Upload fehlgeschlagen (${xhr.status})`));
       }
@@ -317,6 +321,10 @@ function uploadLitterbox(file) {
         resolve(body);
       } else if (xhr.status === 412 || /bad file type/i.test(body)) {
         reject(new Error("Litterbox erlaubt diesen Dateityp nicht (z. B. .exe/.jar). Tipp: als .zip verpacken und erneut hochladen."));
+      } else if (xhr.status >= 500) {
+        // Litterbox antwortet bei Ausfällen mit einer HTML-Fehlerseite. Die roh
+        // anzuzeigen hilft niemandem – der Dienst ist schlicht gerade offline.
+        reject(new Error(`Litterbox ist gerade offline (Fehler ${xhr.status}). Das liegt nicht an dieser Seite – später erneut versuchen.`));
       } else {
         reject(new Error(`Litterbox-Upload fehlgeschlagen (${xhr.status}${body ? ": " + body.slice(0, 60) : ""})`));
       }
@@ -358,9 +366,9 @@ async function handleUpload(file) {
     return;
   }
 
-  // Videos gehen immer zu Litterbox (dort in Discord einbettbar), ebenso alles
-  // über der sicheren GitHub-Grenze. Nur kleine Bilder/Dateien landen auf GitHub.
-  const preferLitterbox = inferType(file.name) === "video" || file.size > GITHUB_MAX;
+  // Alles was auf GitHub passt, geht auch dorthin – dauerhaft und ohne Ablauf.
+  // Litterbox ist nur noch der Notnagel für Dateien über der GitHub-Grenze.
+  const preferLitterbox = file.size > GITHUB_MAX;
   els.progressWrap.hidden = false;
   setProgress(0, "Vorbereiten");
 
