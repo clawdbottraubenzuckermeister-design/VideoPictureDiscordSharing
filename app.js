@@ -354,6 +354,14 @@ async function putToGitHub(file, ts) {
   return { kind: "github", name: file.name, url: created.download_url, size: file.size, ts, path };
 }
 
+// Vom Nutzer gewaehltes Speicherziel. Der Schalter steht bei jedem Seitenaufruf
+// wieder auf "auto" – die Handauswahl ist nur fuer Ausfaelle gedacht und soll
+// nicht unbemerkt haengenbleiben.
+function selectedTarget() {
+  const el = document.querySelector('input[name="uploadTarget"]:checked');
+  return el ? el.value : "auto";
+}
+
 async function handleUpload(file) {
   const { owner, repo, token } = getConfig();
   if (!owner || !repo || !token) {
@@ -366,9 +374,20 @@ async function handleUpload(file) {
     return;
   }
 
-  // Alles was auf GitHub passt, geht auch dorthin – dauerhaft und ohne Ablauf.
-  // Litterbox ist nur noch der Notnagel für Dateien über der GitHub-Grenze.
-  const preferLitterbox = file.size > GITHUB_MAX;
+  const target = selectedTarget();
+  const passtAufGitHub = file.size <= GITHUB_MAX;
+
+  // Handauswahl "GitHub" bei zu großer Datei: gar nicht erst anfangen, sonst
+  // läuft der Nutzer in eine Fehlermeldung nach minutenlangem Hochladen.
+  if (target === "github" && !passtAufGitHub) {
+    toast(
+      `Datei ist ${formatSize(file.size)} groß – GitHub nimmt höchstens ${formatSize(GITHUB_MAX)}. `
+      + "Stelle das Ziel auf „Auto“ oder „Litterbox“.",
+      "error", 7000,
+    );
+    return;
+  }
+
   els.progressWrap.hidden = false;
   setProgress(0, "Vorbereiten");
 
@@ -377,19 +396,23 @@ async function handleUpload(file) {
     const ts = Date.now();
     let item;
 
-    if (preferLitterbox) {
+    if (target === "litterbox") {
+      item = await putToLitterbox(file, ts);
+    } else if (target === "github") {
+      item = await putToGitHub(file, ts);
+    } else if (!passtAufGitHub) {
+      // Auto, aber zu groß fürs Repository – bleibt nur Litterbox.
       item = await putToLitterbox(file, ts);
     } else {
+      // Auto: erst der dauerhafte Weg. Lehnt GitHub wegen der Größe ab, wird
+      // gewechselt. Andere Fehler (kaputtes Token, Netz) bleiben Fehler – sonst
+      // landet die Datei heimlich auf einem fremden Server.
       try {
         item = await putToGitHub(file, ts);
       } catch (err) {
-        // Falls GitHub die Datei doch ablehnt (zu groß) -> automatisch Litterbox.
-        if (/\(41[35]\)|too large|zu groß/i.test(err.message)) {
-          toast("Datei zu groß für dauerhaften Speicher – nutze Litterbox (72 h)…");
-          item = await putToLitterbox(file, ts);
-        } else {
-          throw err;
-        }
+        if (!/\(41[35]\)|too large|zu groß/i.test(err.message)) throw err;
+        toast("Datei zu groß für dauerhaften Speicher – nutze Litterbox (72 h)…");
+        item = await putToLitterbox(file, ts);
       }
     }
 

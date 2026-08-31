@@ -150,6 +150,63 @@ main {
 .drop-or { color: var(--text-dim); margin: 4px 0 12px; }
 .hint { color: var(--text-dim); font-size: .85rem; margin: 14px 0 0; }
 
+/* ---------- Speicherziel-Schalter ---------- */
+
+.target-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.target-label { color: var(--text-dim); font-size: .85rem; }
+
+.segmented {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  background: var(--card-inner);
+  border-radius: 999px;
+  padding: 3px;
+}
+/* Die Radios selbst sind unsichtbar, bedient wird ueber die Labels. */
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.segmented label {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: .82rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.segmented label:hover { color: var(--text); }
+.segmented input:checked + label {
+  background: var(--blurple);
+  color: #fff;
+  font-weight: 600;
+}
+/* Tastaturbedienung muss sichtbar bleiben, obwohl das Radio versteckt ist. */
+.segmented input:focus-visible + label {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* Auf schmalen Schirmen passen die drei vollen Beschriftungen nicht nebeneinander:
+   "Ziel" wandert in eine eigene Zeile und die Zusaetze entfallen. */
+@media (max-width: 520px) {
+  .target-row { gap: 6px; }
+  .target-label { flex-basis: 100%; }
+  .segmented label { font-size: .8rem; padding: 7px 6px; }
+  .target-extra { display: none; }
+}
+
 #progressWrap {
   margin-top: 16px;
   display: flex;

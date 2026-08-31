@@ -45,6 +45,21 @@
         <input type="file" id="fileInput" hidden>
         <p class="hint">Bilder &amp; Videos bis 95&nbsp;MB bleiben dauerhaft · Größere Dateien (bis 1&nbsp;GB) laufen nach 72&nbsp;h ab · die vorherige Datei wird automatisch ersetzt</p>
       </div>
+
+      <!-- Speicherziel. Steht bei jedem Seitenaufruf wieder auf "Auto"; die
+           Handauswahl ist fuer den Fall gedacht, dass ein Dienst gerade ausfaellt. -->
+      <div class="target-row">
+        <span class="target-label">Ziel</span>
+        <div class="segmented" role="radiogroup" aria-label="Speicherziel">
+          <input type="radio" name="uploadTarget" id="targetAuto" value="auto" checked>
+          <label for="targetAuto" title="GitHub, solange die Datei passt – sonst Litterbox. Lehnt GitHub wegen der Größe ab, wird automatisch gewechselt.">Auto</label>
+          <input type="radio" name="uploadTarget" id="targetGithub" value="github">
+          <label for="targetGithub" title="Immer ins Repository. Dauerhaft, aber höchstens 95 MB.">GitHub<span class="target-extra"> · dauerhaft</span></label>
+          <input type="radio" name="uploadTarget" id="targetLitterbox" value="litterbox">
+          <label for="targetLitterbox" title="Immer zu Litterbox. Bis 1 GB, läuft nach 72 h ab.">Litterbox<span class="target-extra"> · 72 h</span></label>
+        </div>
+      </div>
+
       <div id="progressWrap" hidden>
         <div class="progress-track"><div id="progressBar"></div></div>
         <span id="progressText">0&nbsp;%</span>
